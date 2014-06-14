@@ -19,11 +19,11 @@
 
 namespace leveldb {
 
-class BlockBuilder;
-class BlockHandle;
-class WritableFile;
+class DLLX BlockBuilder;
+class DLLX BlockHandle;
+class DLLX WritableFile;
 
-class TableBuilder {
+class DLLX TableBuilder {
  public:
   // Create a builder that will store the contents of the table it is
   // building in *file.  Does not close the file.  It is up to the
@@ -77,9 +77,9 @@ class TableBuilder {
  private:
   bool ok() const { return status().ok(); }
   void WriteBlock(BlockBuilder* block, BlockHandle* handle);
-  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+  void WriteRawBlock(const Slice& data, Compressor* compressor, BlockHandle* handle);
 
-  struct Rep;
+  struct DLLX Rep;
   Rep* rep_;
 
   // No copying allowed

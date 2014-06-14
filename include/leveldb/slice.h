@@ -22,7 +22,7 @@
 
 namespace leveldb {
 
-class Slice {
+class DLLX Slice {
  public:
   // Create an empty slice.
   Slice() : data_(""), size_(0) { }

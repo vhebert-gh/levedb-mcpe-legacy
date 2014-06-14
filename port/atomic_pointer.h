@@ -25,6 +25,11 @@
 #endif
 #ifdef OS_WIN
 #include <windows.h>
+#undef min
+#undef max
+#undef small
+
+#include <atomic>
 #endif
 #ifdef OS_MACOSX
 #include <libkern/OSAtomic.h>
@@ -209,8 +214,30 @@ class AtomicPointer {
 
 // We have neither MemoryBarrier(), nor <cstdatomic>
 #else
-#error Please implement AtomicPointer for this platform.
 
+class AtomicPointer {
+private:
+	std::atomic<void*> ptr;
+public:
+	AtomicPointer() { }
+	explicit AtomicPointer(void* v) :
+		ptr(v) {
+
+	}
+
+	inline void* Acquire_Load() const {
+		return ptr;
+	}
+	inline void Release_Store(void* v) {
+		ptr = v;
+	}
+	inline void* NoBarrier_Load() const { 
+		return ptr; 
+	}
+	inline void NoBarrier_Store(void* v) {
+		ptr = v;
+	}
+};
 #endif
 
 #undef LEVELDB_HAVE_MEMORY_BARRIER

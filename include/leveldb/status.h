@@ -18,7 +18,7 @@
 
 namespace leveldb {
 
-class Status {
+class DLLX Status {
  public:
   // Create a success status.
   Status() : state_(NULL) { }

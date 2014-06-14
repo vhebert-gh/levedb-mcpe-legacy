@@ -20,9 +20,9 @@
 
 namespace leveldb {
 
-class Slice;
+class DLLX Slice;
 
-class FilterPolicy {
+class DLLX FilterPolicy {
  public:
   virtual ~FilterPolicy();
 
@@ -63,7 +63,7 @@ class FilterPolicy {
 // ignores trailing spaces, it would be incorrect to use a
 // FilterPolicy (like NewBloomFilterPolicy) that does not ignore
 // trailing spaces in keys.
-extern const FilterPolicy* NewBloomFilterPolicy(int bits_per_key);
+extern DLLX const FilterPolicy* NewBloomFilterPolicy(int bits_per_key);
 
 }
 

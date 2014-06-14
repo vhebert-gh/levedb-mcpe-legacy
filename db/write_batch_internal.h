@@ -29,11 +29,11 @@ class WriteBatchInternal {
   static void SetSequence(WriteBatch* batch, SequenceNumber seq);
 
   static Slice Contents(const WriteBatch* batch) {
-    return Slice(batch->rep_);
+    return Slice(*batch->rep_);
   }
 
   static size_t ByteSize(const WriteBatch* batch) {
-    return batch->rep_.size();
+    return batch->rep_->size();
   }
 
   static void SetContents(WriteBatch* batch, const Slice& contents);

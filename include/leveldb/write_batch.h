@@ -22,13 +22,14 @@
 #define STORAGE_LEVELDB_INCLUDE_WRITE_BATCH_H_
 
 #include <string>
+#include <memory>
 #include "leveldb/status.h"
 
 namespace leveldb {
 
-class Slice;
+class DLLX Slice;
 
-class WriteBatch {
+class DLLX WriteBatch {
  public:
   WriteBatch();
   ~WriteBatch();
@@ -42,8 +43,10 @@ class WriteBatch {
   // Clear all updates buffered in this batch.
   void Clear();
 
+  size_t Capacity() const;
+
   // Support for iterating over the contents of a batch.
-  class Handler {
+  class DLLX Handler {
    public:
     virtual ~Handler();
     virtual void Put(const Slice& key, const Slice& value) = 0;
@@ -54,7 +57,7 @@ class WriteBatch {
  private:
   friend class WriteBatchInternal;
 
-  std::string rep_;  // See comment in write_batch.cc for the format of rep_
+  std::string* rep_;  // See comment in write_batch.cc for the format of rep_
 
   // Intentionally copyable
 };

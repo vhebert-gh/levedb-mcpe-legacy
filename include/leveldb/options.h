@@ -7,28 +7,21 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <unordered_map>
+
 namespace leveldb {
 
-class Cache;
-class Comparator;
-class Env;
-class FilterPolicy;
-class Logger;
-class Snapshot;
-
-// DB contents are stored in a set of blocks, each of which holds a
-// sequence of key,value pairs.  Each block may be compressed before
-// being stored in a file.  The following enum describes which
-// compression method (if any) is used to compress a block.
-enum CompressionType {
-  // NOTE: do not change the values of existing entries, as these are
-  // part of the persistent format on disk.
-  kNoCompression     = 0x0,
-  kSnappyCompression = 0x1
-};
+class DLLX Cache;
+class DLLX Comparator;
+class DLLX Env;
+class DLLX FilterPolicy;
+class DLLX Logger;
+class DLLX Snapshot;
+class DLLX Compressor;
 
 // Options to control the behavior of a database (passed to DB::Open)
-struct Options {
+struct DLLX Options {
   // -------------------
   // Parameters that affect behavior
 
@@ -126,7 +119,7 @@ struct Options {
   // worth switching to kNoCompression.  Even if the input data is
   // incompressible, the kSnappyCompression implementation will
   // efficiently detect that and will switch to uncompressed mode.
-  CompressionType compression;
+  Compressor* compressors[256];
 
   // If non-NULL, use the specified filter policy to reduce disk reads.
   // Many applications will benefit from passing the result of
@@ -140,7 +133,7 @@ struct Options {
 };
 
 // Options that control read operations
-struct ReadOptions {
+struct DLLX ReadOptions {
   // If true, all data read from underlying storage will be
   // verified against corresponding checksums.
   // Default: false
@@ -166,7 +159,7 @@ struct ReadOptions {
 };
 
 // Options that control write operations
-struct WriteOptions {
+struct DLLX WriteOptions {
   // If true, the write will be flushed from the operating system
   // buffer cache (by calling WritableFile::Sync()) before the write
   // is considered complete.  If this flag is true, writes will be

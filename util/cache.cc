@@ -318,7 +318,7 @@ class ShardedLRUCache : public Cache {
 
 }  // end anonymous namespace
 
-Cache* NewLRUCache(size_t capacity) {
+DLLX Cache* NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
 }
 
