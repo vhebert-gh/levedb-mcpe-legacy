@@ -1,5 +1,5 @@
 
-#ifndef NO_SNAPPY
+#ifdef SNAPPY
 
 #include "snappy_compressor.h"
 
