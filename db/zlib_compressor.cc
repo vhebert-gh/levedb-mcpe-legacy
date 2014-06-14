@@ -2,7 +2,12 @@
 
 #include "zlib_compressor.h"
 
+#ifndef OS_ANDROID
 #include <zlib/zlib.h>
+#else
+#include <zlib.h>
+#endif
+
 #include <algorithm>
 
 namespace leveldb {
