@@ -1,6 +1,6 @@
 #ifndef NO_ZLIB
 
-#include "zlib_compressor.h"
+#include "leveldb/zlib_compressor.h"
 
 #ifndef OS_ANDROID
 #include <zlib/zlib.h>

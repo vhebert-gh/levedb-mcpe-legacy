@@ -14,7 +14,7 @@
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "compressor.h"
+#include "leveldb/compressor.h"
 
 namespace leveldb {
 
