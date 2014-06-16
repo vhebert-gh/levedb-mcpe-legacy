@@ -1049,7 +1049,7 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   }
   versions_->current()->AddIterators(options, &list);
   Iterator* internal_iter =
-      NewMergingIterator(&internal_comparator_, &list[0], list.size());
+      NewMergingIterator(&internal_comparator_, &list[0], (uint32_t)list.size());
   versions_->current()->Ref();
 
   cleanup->mu = &mutex_;

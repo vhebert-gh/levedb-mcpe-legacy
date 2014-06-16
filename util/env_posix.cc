@@ -61,7 +61,7 @@ class PosixSequentialFile: public SequentialFile {
   }
 
   virtual Status Skip(uint64_t n) {
-    if (fseek(file_, n, SEEK_CUR)) {
+    if (fseek(file_, (long)n, SEEK_CUR)) {
       return IOError(filename_, errno);
     }
     return Status::OK();
@@ -322,9 +322,9 @@ class PosixEnv : public Env {
       uint64_t size;
       s = GetFileSize(fname, &size);
       if (s.ok()) {
-        void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+        void* base = mmap(NULL, (long)size, PROT_READ, MAP_SHARED, fd, 0);
         if (base != MAP_FAILED) {
-          *result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
+          *result = new PosixMmapReadableFile(fname, base, (long)size, &mmap_limit_);
         } else {
           s = IOError(fname, errno);
         }

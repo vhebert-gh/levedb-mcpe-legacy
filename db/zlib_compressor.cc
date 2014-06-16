@@ -24,7 +24,7 @@ namespace leveldb {
 		strm.zalloc = 0;
 		strm.zfree = 0;
 		strm.next_in = (unsigned char *)(input);
-		strm.avail_in = length;
+		strm.avail_in = (uint32_t)length;
 		strm.next_out = temp_buffer;
 		strm.avail_out = BUFSIZE;
 
@@ -66,13 +66,12 @@ namespace leveldb {
 		size_t have;
 		z_stream strm;
 		unsigned char out[CHUNK];
-		size_t read = 0;
 
 		/* allocate inflate state */
 		strm.zalloc = Z_NULL;
 		strm.zfree = Z_NULL;
 		strm.opaque = Z_NULL;
-		strm.avail_in = length;
+		strm.avail_in = (uint32_t)length;
 		strm.next_in = (Bytef*)input;
 		ret = inflateInit(&strm);
 		if (ret != Z_OK)
