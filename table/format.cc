@@ -133,14 +133,14 @@ namespace leveldb {
 			assert(compressor != nullptr);
 
 			std::string buffer;
-			if (!compressor->decompress(data, n, buffer)) {
+			if (!compressor || !compressor->decompress(data, n, buffer)) {
 				delete[] buf;
 				return Status::Corruption("corrupted compressed block contents");
 			}
 
 			auto ubuf = new char[buffer.size()];
 			memcpy(ubuf, buffer.data(), buffer.size());
-
+			delete[] buf;
 			result->data = Slice(ubuf, buffer.size());
 			result->heap_allocated = true;
 			result->cachable = true;
