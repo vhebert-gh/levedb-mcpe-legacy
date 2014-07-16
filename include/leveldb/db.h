@@ -148,13 +148,13 @@ class DLLX DB {
 
 // Destroy the contents of the specified database.
 // Be very careful using this method.
-Status DestroyDB(const std::string& name, const Options& options);
+extern DLLX Status DestroyDB(const std::string& name, const Options& options);
 
 // If a DB cannot be opened, you may attempt to call this method to
 // resurrect as much of the contents of the database as possible.
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
-Status RepairDB(const std::string& dbname, const Options& options);
+extern DLLX Status RepairDB(const std::string& dbname, const Options& options);
 
 }  // namespace leveldb
 

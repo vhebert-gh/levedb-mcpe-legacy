@@ -1479,7 +1479,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
 Snapshot::~Snapshot() {
 }
 
-Status DestroyDB(const std::string& dbname, const Options& options) {
+DLLX Status DestroyDB(const std::string& dbname, const Options& options) {
   Env* env = options.env;
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist
