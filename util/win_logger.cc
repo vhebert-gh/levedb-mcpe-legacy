@@ -4,6 +4,8 @@
 
 #include "util/win_logger.h"
 
+#ifdef WIN32
+
 #include <windows.h>
 
 namespace leveldb {
@@ -77,3 +79,5 @@ void WinLogger::Logv(const char* format, va_list ap) {
 }
 
 }
+
+#endif
