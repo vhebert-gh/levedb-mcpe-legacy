@@ -49,6 +49,10 @@
 #include <string>
 #include "port/atomic_pointer.h"
 
+#ifndef PLATFORM_IS_LITTLE_ENDIAN
+#define PLATFORM_IS_LITTLE_ENDIAN (__BYTE_ORDER == __LITTLE_ENDIAN)
+#endif
+
 #if defined(OS_MACOSX) || defined(OS_SOLARIS) || defined(OS_FREEBSD) ||\
     defined(OS_NETBSD) || defined(OS_OPENBSD) || defined(OS_DRAGONFLYBSD) ||\
     defined(OS_ANDROID) || defined(OS_HPUX)
