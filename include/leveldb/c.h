@@ -202,7 +202,10 @@ extern void leveldb_options_set_block_restart_interval(leveldb_options_t*, int);
 
 enum {
   leveldb_no_compression = 0,
-  leveldb_snappy_compression = 1
+#ifdef SNAPPY
+  leveldb_snappy_compression = 1,
+#endif
+  leveldb_zlib_compression = 2
 };
 extern void leveldb_options_set_compression(leveldb_options_t*, int);
 

@@ -15,10 +15,11 @@
 #include "leveldb/options.h"
 #include "leveldb/status.h"
 #include "leveldb/write_batch.h"
+#include "leveldb/zlib_compressor.h"
+#include "leveldb/snappy_compressor.h"
 
 using leveldb::Cache;
 using leveldb::Comparator;
-using leveldb::CompressionType;
 using leveldb::DB;
 using leveldb::Env;
 using leveldb::FileLock;
@@ -447,7 +448,18 @@ void leveldb_options_set_block_restart_interval(leveldb_options_t* opt, int n) {
 }
 
 void leveldb_options_set_compression(leveldb_options_t* opt, int t) {
-  opt->rep.compression = static_cast<CompressionType>(t);
+  switch(t) {
+    case 0:
+      opt->rep.compressors[0] = nullptr;
+      break;
+#ifdef SNAPPY
+    case leveldb_snappy_compression:
+      opt->rep.compressors[0] = new leveldb::SnappyCompressor();
+      break;
+#endif
+    case leveldb_zlib_compression:
+      opt->rep.compressors[0] = new leveldb::ZlibCompressor();
+  }
 }
 
 leveldb_comparator_t* leveldb_comparator_create(
