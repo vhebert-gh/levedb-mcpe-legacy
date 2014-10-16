@@ -55,15 +55,17 @@ class FileState {
     }
     const uint64_t available = size_ - offset;
     if (n > available) {
-      n = (long)available;
+      n = static_cast<size_t>(available);
     }
     if (n == 0) {
       *result = Slice();
       return Status::OK();
     }
 
-    size_t block = (long)(offset / kBlockSize);
-    size_t block_offset = offset % kBlockSize;
+    assert(offset / kBlockSize <= SIZE_MAX);
+    size_t block = static_cast<size_t>(offset / kBlockSize);
+
+	size_t block_offset = offset % kBlockSize;
 
     if (n <= kBlockSize - block_offset) {
       // The requested bytes are all in the first block.
@@ -167,8 +169,9 @@ class SequentialFileImpl : public SequentialFile {
     if (pos_ > file_->Size()) {
       return Status::IOError("pos_ > file_->Size()");
     }
-    const size_t available = (long)(file_->Size() - pos_);
-    if (n > available) {
+	const uint64_t available = file_->Size() - pos_;
+
+	if (n > available) {
       n = available;
     }
     pos_ += n;
@@ -177,7 +180,7 @@ class SequentialFileImpl : public SequentialFile {
 
  private:
   FileState* file_;
-  size_t pos_;
+  uint64_t pos_;
 };
 
 class RandomAccessFileImpl : public RandomAccessFile {

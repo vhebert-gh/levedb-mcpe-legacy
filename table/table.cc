@@ -41,7 +41,7 @@ Status Table::Open(const Options& options,
                    Table** table) {
   *table = NULL;
   if (size < Footer::kEncodedLength) {
-    return Status::InvalidArgument("file is too short to be an sstable");
+    return Status::Corruption("file is too short to be an sstable");
   }
 
   char footer_space[Footer::kEncodedLength];
@@ -58,7 +58,12 @@ Status Table::Open(const Options& options,
   BlockContents contents;
   Block* index_block = NULL;
   if (s.ok()) {
-    s = ReadBlock(file, options, ReadOptions(), footer.index_handle(), &contents);
+    ReadOptions opt;
+    if (options.paranoid_checks) {
+      opt.verify_checksums = true;
+    }
+    s = ReadBlock(file, options, opt, footer.index_handle(), &contents);
+
     if (s.ok()) {
       index_block = new Block(contents);
     }
@@ -92,6 +97,9 @@ void Table::ReadMeta(const Footer& footer) {
   // TODO(sanjay): Skip this if footer.metaindex_handle() size indicates
   // it is an empty block.
   ReadOptions opt;
+  if (rep_->options.paranoid_checks) {
+    opt.verify_checksums = true;
+  }
   BlockContents contents;
   if (!ReadBlock(rep_->file, rep_->options, opt, footer.metaindex_handle(), &contents).ok()) {
     // Do not propagate errors since meta info is not needed for operation
@@ -120,6 +128,9 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   // We might want to unify with ReadBlock() if we start
   // requiring checksum verification in Table::Open.
   ReadOptions opt;
+  if (rep_->options.paranoid_checks) {
+    opt.verify_checksums = true;
+  }
   BlockContents block;
   if (!ReadBlock(rep_->file, rep_->options, opt, filter_handle, &block).ok()) {
     return;

@@ -146,7 +146,7 @@ struct DLLX ReadOptions {
 
   // If "snapshot" is non-NULL, read as of the supplied snapshot
   // (which must belong to the DB that is being read and which must
-  // not have been released).  If "snapshot" is NULL, use an impliicit
+  // not have been released).  If "snapshot" is NULL, use an implicit
   // snapshot of the state at the beginning of this read operation.
   // Default: NULL
   const Snapshot* snapshot;
