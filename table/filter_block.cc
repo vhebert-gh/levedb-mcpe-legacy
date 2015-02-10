@@ -92,6 +92,8 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
   num_ = (n - 5 - last_word) / 4;
 }
 
+#pragma warning ( push )
+#pragma warning ( disable : 4018 )
 bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
   uint64_t index = block_offset >> base_lg_;
   if (index < num_) {
@@ -107,5 +109,6 @@ bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
   }
   return true;  // Errors are treated as potential matches
 }
+#pragma warning ( pop )
 
 }

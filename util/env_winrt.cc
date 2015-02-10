@@ -46,18 +46,18 @@ namespace leveldb {
 			~IOException() throw () {} // Updated
 			const char* what() const throw() { return s.c_str(); }
 		};
-
-		static std::wstring s2ws(const std::string& s)
-		{
-			int len;
-			int slength = (int)s.length() + 1;
-			len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, 0, 0);
-			wchar_t* buf = new wchar_t[len];
-			MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, buf, len);
-			std::wstring r(buf);
-			delete[] buf;
-			return r;
-		}
+// 
+// 		static std::wstring s2ws(const std::string& s)
+// 		{
+// 			int len;
+// 			int slength = (int)s.length() + 1;
+// 			len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, 0, 0);
+// 			wchar_t* buf = new wchar_t[len];
+// 			MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, buf, len);
+// 			std::wstring r(buf);
+// 			delete[] buf;
+// 			return r;
+// 		}
 
 		static std::string ws2s(const std::wstring& ws)
 		{
@@ -136,10 +136,10 @@ namespace leveldb {
 			return static_cast<uint32_t>(::GetCurrentProcessId());
 		}
 
-		// returns the ID of the current thread
-		static uint32_t current_thread_id(void) {
-			return static_cast<uint32_t>(::GetCurrentThreadId());
-		}
+// 		// returns the ID of the current thread
+// 		static uint32_t current_thread_id(void) {
+// 			return static_cast<uint32_t>(::GetCurrentThreadId());
+// 		}
 
 		static char global_read_only_buf[0x8000];
 
@@ -579,9 +579,8 @@ namespace leveldb {
 			// BGThread() is the body of the background thread
 			void BGThread();
 
-			static void* BGThreadWrapper(void* arg) {
+			static void BGThreadWrapper(void* arg) {
 				reinterpret_cast<WinRTEnv*>(arg)->BGThread();
-				return NULL;
 			}
 
 			std::mutex mu_;
