@@ -31,7 +31,11 @@
 #ifndef STORAGE_LEVELDB_PORT_PORT_WIN_H_
 #define STORAGE_LEVELDB_PORT_PORT_WIN_H_
 
+#if _MSC_VER >= 1900
+//stdio.h => #error Macro definition of snprintf conflicts with Standard Library function declaration 
+#else
 #define snprintf _snprintf
+#endif
 #define close _close
 #define fread_unlocked _fread_nolock
 
