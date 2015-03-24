@@ -98,7 +98,7 @@ namespace leveldb {
 			std::string dir = fname;
 			std::replace(dir.begin(), dir.end(), '/', '\\');
 			char tmpName[MAX_FILENAME];
-			strcpy(tmpName, dir.c_str());
+			strcpy_s(tmpName, dir.c_str());
 
 			// Create parent directories
 			for (char* p = strchr(tmpName, '\\'); p; p = strchr(p + 1, '\\')) {
