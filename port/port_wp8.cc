@@ -30,6 +30,7 @@
 
 #include "port/port_winrt.h"
 
+#ifdef MCPE_PLATFORM_WINDOWS_FAMILY
 #include <windows.h>
 #include <cassert>
 
@@ -120,3 +121,4 @@ namespace leveldb {
 
 	}
 }
+#endif

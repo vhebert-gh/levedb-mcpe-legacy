@@ -44,9 +44,11 @@ void PutFixed64(std::string* dst, uint64_t value) {
   dst->append(buf, sizeof(buf));
 }
 
+#ifdef _MSC_VER
 // aaheyse - disable warnings for VS as they are now errors, actual code hasn't been changed
 #pragma warning ( push )
 #pragma warning ( disable : 4244 )
+#endif
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
   unsigned char* ptr = reinterpret_cast<unsigned char*>(dst);
@@ -74,8 +76,10 @@ char* EncodeVarint32(char* dst, uint32_t v) {
   }
   return reinterpret_cast<char*>(ptr);
 }
+#ifdef _MSC_VER
 #pragma warning ( pop )
 // aaheysse end changes
+#endif
 
 void PutVarint32(std::string* dst, uint32_t v) {
   char buf[5];
