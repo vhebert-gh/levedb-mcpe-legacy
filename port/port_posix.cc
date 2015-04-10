@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#ifndef WIN32
 #include "port/port_posix.h"
 
 #include <cstdlib>
@@ -52,3 +53,4 @@ void InitOnce(OnceType* once, void (*initializer)()) {
 
 }  // namespace port
 }  // namespace leveldb
+#endif
