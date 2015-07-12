@@ -47,18 +47,6 @@ namespace leveldb {
 			~IOException() throw () {} // Updated
 			const char* what() const throw() { return s.c_str(); }
 		};
-// 
-// 		static std::wstring s2ws(const std::string& s)
-// 		{
-// 			int len;
-// 			int slength = (int)s.length() + 1;
-// 			len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, 0, 0);
-// 			wchar_t* buf = new wchar_t[len];
-// 			MultiByteToWideChar(CP_UTF8, 0, s.c_str(), slength, buf, len);
-// 			std::wstring r(buf);
-// 			delete[] buf;
-// 			return r;
-// 		}
 
 		static std::string ws2s(const std::wstring& ws)
 		{
@@ -86,12 +74,7 @@ namespace leveldb {
 
 		static std::wstring GetFullPath(const std::string& fname)
 		{
-#if 0
-			Platform::String^ path = Platform::String::Concat(Windows::Storage::ApplicationData::Current->LocalFolder->Path, "\\");
-			return Platform::String::Concat(path, ref new Platform::String(s2ws(fname).c_str()));
-#else
 			return std::wstring(fname.begin(), fname.end());
-#endif
 		}
 
 		static void EnsureDirectory(const std::string& fname)
