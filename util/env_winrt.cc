@@ -137,11 +137,6 @@ namespace leveldb {
 			return static_cast<uint32_t>(::GetCurrentProcessId());
 		}
 
-// 		// returns the ID of the current thread
-// 		static uint32_t current_thread_id(void) {
-// 			return static_cast<uint32_t>(::GetCurrentThreadId());
-// 		}
-
 		static char global_read_only_buf[0x8000];
 
 		class WinSequentialFile : public SequentialFile {
@@ -410,7 +405,6 @@ namespace leveldb {
 				}
 			}
 
-#define MAX_FILENAME 512
 			virtual Status CreateDir(const std::string& name) {
 				EnsureDirectory(name);
 				::CreateDirectoryW(GetFullPath(name).c_str(), NULL);
@@ -510,58 +504,10 @@ namespace leveldb {
 				}
 			}
 
-			struct timezone {
-				int  tz_minuteswest; /* minutes W of Greenwich */
-				int  tz_dsttime;     /* type of dst correction */
-			};
-#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
-#define DELTA_EPOCH_IN_MICROSECS  116444736000000000Ui64 // CORRECT
-#else
-#define DELTA_EPOCH_IN_MICROSECS  116444736000000000ULL // CORRECT
-#endif
-
-#if (WINDOWS_FAMILY == WINDOWS_FAMILY_PHONE_APP)
-			struct timeval {
-				long    tv_sec;         /* seconds */
-				long    tv_usec;        /* and microseconds */
-			};
-#endif
-			int gettimeofday(struct timeval *tv, struct timezone *tz) {
-				FILETIME ft;
-				uint64_t tmpres = 0;
-				static int tzflag = 0;
-
-				if(tv) {
-					GetSystemTimeAsFileTime(&ft);
-					tmpres |= ft.dwHighDateTime;
-					tmpres <<= 32;
-					tmpres |= ft.dwLowDateTime;
-
-					/*converting file time to unix epoch*/
-					tmpres /= 10;  /*convert into microseconds*/
-					tmpres -= DELTA_EPOCH_IN_MICROSECS;
-					tv->tv_sec = (long)(tmpres / 1000000UL);
-					tv->tv_usec = (long)(tmpres % 1000000UL);
-				}
-
-				if(tz) {
-					if(!tzflag) {
-#if (WINDOWS_FAMILY != WINDOWS_FAMILY_PHONE_APP)
-						_tzset();
-#endif
-						tzflag++;
-					}
-					tz->tz_minuteswest = _timezone / 60;
-					tz->tz_dsttime = _daylight;
-				}
-
-				return 0;
-			}
-
 			virtual uint64_t NowMicros() {
-				struct timeval tv;
-				gettimeofday(&tv, 0);
-				return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+				const auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+
+				return std::chrono::duration_cast<std::chrono::microseconds>(now).count();
 			}
 
 			virtual void SleepForMicroseconds(int micros) {
