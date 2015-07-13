@@ -3,18 +3,10 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #ifdef MCPE_PLATFORM_WINDOWS_FAMILY
-#include <deque>
 
+#define VC_EXTRALEAN            // Exclude rarely-used stuff
+#define WIN32_LEAN_AND_MEAN     // Exclude rarely-used stuff from Windows headers
 #include <windows.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
-#include <io.h>
 #include "leveldb/env.h"
 #include "leveldb/slice.h"
 
@@ -23,17 +15,14 @@
 #include "util/logging.h"
 
 
+#include <deque>
 #include <fstream>
 #include <algorithm>
 #include <sstream>
 #include <chrono>
-#include <ctime>
 #include <memory>
 #include <condition_variable>
 #include <thread>
-
-//using namespace Windows::Storage;
-//using namespace Windows::ApplicationModel;
 
 #define MAX_FILENAME 512
 
@@ -501,12 +490,6 @@ namespace leveldb {
 
 
 		private:
-			void PthreadCall(const char* label, int result) {
-				if(result != 0) {
-					fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
-					exit(1);
-				}
-			}
 
 			// BGThread() is the body of the background thread
 			void BGThread();
