@@ -120,8 +120,6 @@ namespace leveldb {
 			return static_cast<uint32_t>(::GetCurrentProcessId());
 		}
 
-		static char global_read_only_buf[0x8000];
-
 		class WinSequentialFile : public SequentialFile {
 		private:
 			std::string _fname;
@@ -595,7 +593,6 @@ namespace leveldb {
 	static BOOL CALLBACK InitDefaultEnv(PINIT_ONCE InitOnce,
 		PVOID Parameter,
 		PVOID *lpContext) {
-		::memset(global_read_only_buf, 0, sizeof(global_read_only_buf));
 		default_env = new WinRTEnv;
 		return TRUE;
 	}
