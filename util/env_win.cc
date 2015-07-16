@@ -162,14 +162,13 @@ namespace leveldb {
 			}
 
 			virtual Status Flush() {
-				file_.flush();
 				return Status::OK();
 			}
 
 			virtual Status Sync() {
 				Status result;
 				try {
-					Flush();
+					file_.flush();
 				} catch(const std::exception & e) {
 					result = Status::IOError(path_ + " sync", e.what());
 				}
