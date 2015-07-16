@@ -29,6 +29,11 @@
 namespace leveldb {
 	namespace {
 
+		class NoOpLogger : public Logger {
+		public:
+			virtual void Logv(const char* format, va_list ap) { }
+		};
+
 		struct IOException : public std::exception
 		{
 			std::string s;
@@ -240,12 +245,15 @@ namespace leveldb {
 			}
 
 			virtual Status Flush() {
-				BOOL ret = ::FlushFileBuffers(_file);
-				return (!ret ? GetLastWindowsError(_fname) : Status::OK());
+				//BOOL ret = ::FlushFileBuffers(_file);
+				//return (!ret ? GetLastWindowsError(_fname) : Status::OK());
+				return Status::OK();
 			}
 	
 			virtual Status Sync() {
-				return Flush();
+				BOOL ret = ::FlushFileBuffers(_file);
+				return (!ret ? GetLastWindowsError(_fname) : Status::OK());
+				//return Flush();
 			}
 		};
 
@@ -458,20 +466,8 @@ namespace leveldb {
 #endif
 
 			virtual Status NewLogger(const std::string& fname, Logger** result) {
-				std::string path = fname;
-				std::replace(path.begin(), path.end(), '/', '\\');
-				FILE* f = fopen(path.c_str(), "wt");
-				if(f == NULL) {
-					*result = NULL;
-					return Status::IOError(fname, strerror(errno));
-				} else {
-#ifdef WIN32
-					*result = new WinLogger(f);
-#else
-					*result = new PosixLogger(f, &gettid);
-#endif
-					return Status::OK();
-				}
+				*result = new NoOpLogger();
+				return Status::OK();
 			}
 
 			virtual uint64_t NowMicros() {
