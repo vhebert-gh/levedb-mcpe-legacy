@@ -23,6 +23,7 @@
 #include <memory>
 #include <condition_variable>
 #include <thread>
+#include "Filepath.h"
 
 #define MAX_FILENAME 512
 
@@ -66,9 +67,8 @@ namespace leveldb {
 			return Status::IOError(name, ws2s(lpBuffer).c_str());
 		}
 
-		static std::wstring GetFullPath(const std::string& fname)
-		{
-			return std::wstring(fname.begin(), fname.end());
+		static std::wstring GetFullPath(const std::string& fname) {
+			return ::port::toFilePath(fname);
 		}
 
 		static void EnsureDirectory(const std::string& fname)
