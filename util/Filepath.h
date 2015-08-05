@@ -26,13 +26,12 @@ namespace port {
 		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
 		return std::move(converter.from_bytes(string));
 #else
-		return string;
+		return std::move(string);
 #endif
 	}
 
-
 #if defined(_MSC_VER)
-	inline FILE* fopen(const filepath_char* filename, const filepath_char* mode) {
+	inline FILE* fopen_mb(const filepath_char* filename, const filepath_char* mode) {
 		FILE* file = nullptr;
 
 		errno_t error = _wfopen_s(&file, filename, mode);
@@ -42,17 +41,14 @@ namespace port {
 	}
 
 	// this function will silently allocate memory on windows to convert char* to wchar_t*
-	inline FILE* fopen(const char* const filename, const filepath_char* mode) {
+	inline FILE* fopen_mb(const char* const filename, const filepath_char* mode) {
 		filepath path = toFilePath(filename);
 
-		return port::fopen(path.c_str(), mode);
+		return port::fopen_mb(path.c_str(), mode);
 	}
-
 #else
-
-	inline FILE* fopen(const filepath_char* filename, const filepath_char* mode) {
-		return fopen(filename, mode);
+	inline FILE* fopen_mb(const filepath_char* filename, const filepath_char* mode) {
+		return ::fopen(filename, mode);
 	}
-
 #endif
 }
