@@ -90,10 +90,17 @@ namespace leveldb {
 		{
 			EnsureDirectory(fname);
 			std::wstring path = GetFullPath(fname);
-            file = ::CreateFile2(path.c_str(),
+#ifdef MCPE_PLATFORM_WINRT
+			file = ::CreateFile2(path.c_str(),
 				dwDesiredAccess,
 				dwShareMode,
 				dwCreationDisposition, NULL);
+#else
+			file = ::CreateFileW(path.c_str(),
+				dwDesiredAccess,
+				dwShareMode,
+				NULL, dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+#endif
 			return (file == INVALID_HANDLE_VALUE ? GetLastWindowsError(fname) : Status::OK());
 		}
 
