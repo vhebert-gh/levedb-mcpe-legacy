@@ -142,6 +142,12 @@ class DLLX DB {
   //    db->CompactRange(NULL, NULL);
   virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
 
+  // Allows the underlying storage to prepare for an application suspend event
+  virtual void SuspendCompaction() = 0;
+
+  // Allow the underlying storage to react to an application resume event
+  virtual void ResumeCompaction() = 0;
+
  private:
   // No copying allowed
   DB(const DB&);

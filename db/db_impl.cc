@@ -133,6 +133,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       seed_(0),
       tmp_batch_(new WriteBatch),
       bg_compaction_scheduled_(false),
+      suspending_compaction_(NULL),
       manual_compaction_(NULL) {
   has_imm_.Release_Store(NULL);
 
@@ -147,6 +148,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
+  suspending_compaction_.Release_Store(nullptr); // make sure that the suspend flag is clear
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
   while (bg_compaction_scheduled_) {
     bg_cv_.Wait();
@@ -647,6 +649,8 @@ void DBImpl::MaybeScheduleCompaction() {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
+  } else if (suspending_compaction_.Acquire_Load()) {
+	// DB is being suspended; no more background compactions
   } else if (!bg_error_.ok()) {
     // Already got an error; no more changes
   } else if (imm_ == NULL &&
@@ -657,6 +661,24 @@ void DBImpl::MaybeScheduleCompaction() {
     bg_compaction_scheduled_ = true;
     env_->Schedule(&DBImpl::BGWork, this);
   }
+}
+
+void DBImpl::SuspendCompaction() {
+	// set suspend flag and wait for any currently executing bg tasks to complete
+	mutex_.Lock();
+	suspending_compaction_.Release_Store(this);  // Any non-NULL value is ok
+	while (bg_compaction_scheduled_) {
+		bg_cv_.Wait();
+	}
+	mutex_.Unlock();
+	Log(options_.info_log, "db BG suspended\n");
+}
+
+void DBImpl::ResumeCompaction() {
+	mutex_.Lock();
+	suspending_compaction_.Release_Store(nullptr);
+	mutex_.Unlock();
+	Log(options_.info_log, "db BG resumed\n");
 }
 
 void DBImpl::BGWork(void* db) {
@@ -747,6 +769,8 @@ void DBImpl::BackgroundCompaction() {
     // Done
   } else if (shutting_down_.Acquire_Load()) {
     // Ignore compaction errors found during shutting down
+  } else if (suspending_compaction_.Acquire_Load()) {
+    // Ignore compaction errors found during suspend
   } else {
     Log(options_.info_log,
         "Compaction error: %s", status.ToString().c_str());
