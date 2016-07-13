@@ -54,7 +54,7 @@ namespace leveldb {
 		deflateEnd(&strm);
 	}
 
-	int _zlibInflate(const char* input, size_t length, ::std::string &output) {
+	int ZlibCompressor::inflate(const char* input, size_t length, ::std::string &output) {
 		const int CHUNK = 64 * 1024;
 
 		int ret;
@@ -70,7 +70,9 @@ namespace leveldb {
 		strm.next_in = (Bytef*)input;
 		ret = inflateInit(&strm);
 		if (ret != Z_OK)
+		{
 			return ret;
+		}
 
 		/* decompress until deflate stream ends or end of file */
 		do {
@@ -80,7 +82,7 @@ namespace leveldb {
 				strm.avail_out = CHUNK;
 				strm.next_out = out;
 
-				ret = inflate(&strm, Z_NO_FLUSH);
+				ret = ::inflate(&strm, Z_NO_FLUSH);
 
 				if (ret == Z_NEED_DICT) {
 					ret = Z_DATA_ERROR;
@@ -105,7 +107,7 @@ namespace leveldb {
 	}
 
 	bool ZlibCompressor::decompress(const char* input, size_t length, ::std::string &output) const {
-		return _zlibInflate(input, length, output) == Z_OK;
+		return ZlibCompressor::inflate(input, length, output) == Z_OK;
 	}
 		
 }

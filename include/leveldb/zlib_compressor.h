@@ -10,6 +10,8 @@ namespace leveldb {
 	public:
 		static const int SERIALIZE_ID = 2;
 
+		static int inflate(const char* input, size_t length, ::std::string &output);
+
 		const int compressionLevel;
         
         virtual ~ZlibCompressor() {
