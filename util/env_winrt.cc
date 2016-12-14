@@ -484,11 +484,7 @@ namespace leveldb {
 			}
 
 			virtual void SleepForMicroseconds(int micros) {
-#ifdef MCPE_PLATFORM_WINDOWS81
-				std::this_thread::yield(); // std::this_thread_sleep_for deadlocks on winrt with 2013 (api probably not supported)
-#else
 				std::this_thread::sleep_for(std::chrono::microseconds(micros));
-#endif
 			}
 
 
