@@ -23,7 +23,6 @@ class AutoCompactTest {
     options_.block_cache = tiny_cache_;
     DestroyDB(dbname_, options_);
     options_.create_if_missing = true;
-    options_.compression = kNoCompression;
     ASSERT_OK(DB::Open(options_, dbname_, &db_));
   }
 
