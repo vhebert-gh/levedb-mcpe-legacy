@@ -49,7 +49,6 @@ TESTS = \
 	util/hash_test
 
 UTILS = \
-	db/db_bench \
 	db/leveldbutil
 
 # Put the object files in a subdirectory, but the application at the top of the object dir.
@@ -81,7 +80,7 @@ else
 STATIC_OUTDIR=out-static
 SHARED_OUTDIR=out-shared
 STATIC_PROGRAMS := $(addprefix $(STATIC_OUTDIR)/, $(PROGNAMES))
-SHARED_PROGRAMS := $(addprefix $(SHARED_OUTDIR)/, db_bench)
+#SHARED_PROGRAMS := $(addprefix $(SHARED_OUTDIR)/, db_bench)
 endif
 
 STATIC_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(SOURCES:.cc=.o))
