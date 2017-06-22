@@ -44,6 +44,7 @@ class DLLX WriteBatch {
   void Clear();
 
   size_t Capacity() const;
+  size_t Size() const;
 
   // Support for iterating over the contents of a batch.
   class DLLX Handler {

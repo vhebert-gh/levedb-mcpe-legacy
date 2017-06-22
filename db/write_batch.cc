@@ -117,6 +117,11 @@ size_t WriteBatch::Capacity() const
 	return rep_ ? rep_->capacity() : 0;
 }
 
+size_t WriteBatch::Size() const
+{
+	return rep_ ? rep_->size() : 0;
+}
+
 namespace {
 class MemTableInserter : public WriteBatch::Handler {
  public:
