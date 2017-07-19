@@ -579,6 +579,8 @@ namespace leveldb {
 		return TRUE;
 	}
 
+	// Xbox uses the LevelDB Environment Plugin that goes through Core::FileSystem
+#ifndef MCPE_PLATFORM_XBOX
 	Env* Env::Default() {
 #if 0
 		PVOID lpContext;
@@ -593,6 +595,6 @@ namespace leveldb {
 
 		return default_env;
 	}
-
+#endif
 }
 #endif
