@@ -7,7 +7,7 @@
 
 namespace leveldb {
 
-	void ZlibCompressor::compressImpl(const char* input, size_t length, ::std::string& buffer) const
+	void ZlibCompressorBase::compressImpl(const char* input, size_t length, ::std::string& buffer) const
 	{
 		const size_t BUFSIZE = 128 * 1024;
 		unsigned char temp_buffer[BUFSIZE];
@@ -23,8 +23,9 @@ namespace leveldb {
 		strm.next_out = temp_buffer;
 		strm.avail_out = BUFSIZE;
 
-		deflateInit(&strm, compressionLevel);
-
+		auto res = deflateInit2(&strm, compressionLevel, Z_DEFLATED, _window(), 8, Z_DEFAULT_STRATEGY);
+		assert(res == Z_OK);
+		
 		int deflate_res = Z_OK;
 		while (strm.avail_in != 0)
 		{
@@ -32,7 +33,7 @@ namespace leveldb {
 			assert(res == Z_OK);
 			if (strm.avail_out == 0)
 			{
-				buffer.insert(buffer.end(), temp_buffer, temp_buffer + BUFSIZE);
+				buffer.append(temp_buffer, temp_buffer + BUFSIZE);
 				strm.next_out = temp_buffer;
 				strm.avail_out = BUFSIZE;
 			}
@@ -42,7 +43,7 @@ namespace leveldb {
 		{
 			if (strm.avail_out == 0)
 			{
-				buffer.insert(buffer.end(), temp_buffer, temp_buffer + BUFSIZE);
+				buffer.append(temp_buffer, temp_buffer + BUFSIZE);
 				strm.next_out = temp_buffer;
 				strm.avail_out = BUFSIZE;
 			}
@@ -50,11 +51,11 @@ namespace leveldb {
 		}
 
 		assert(deflate_res == Z_STREAM_END);
-		buffer.insert(buffer.end(), temp_buffer, temp_buffer + BUFSIZE - strm.avail_out);
+		buffer.append(temp_buffer, temp_buffer + BUFSIZE - strm.avail_out);
 		deflateEnd(&strm);
 	}
 
-	int ZlibCompressor::inflate(const char* input, size_t length, ::std::string &output) {
+	int ZlibCompressorBase::inflate(const char* input, size_t length, ::std::string &output) const {
 		const int CHUNK = 64 * 1024;
 
 		int ret;
@@ -68,7 +69,9 @@ namespace leveldb {
 		strm.opaque = Z_NULL;
 		strm.avail_in = (uint32_t)length;
 		strm.next_in = (Bytef*)input;
-		ret = inflateInit(&strm);
+
+		ret = inflateInit2(&strm, _window());
+
 		if (ret != Z_OK)
 		{
 			return ret;
@@ -106,10 +109,14 @@ namespace leveldb {
 		return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
 	}
 
-	bool ZlibCompressor::decompress(const char* input, size_t length, ::std::string &output) const {
-		return ZlibCompressor::inflate(input, length, output) == Z_OK;
+	bool ZlibCompressorBase::decompress(const char* input, size_t length, ::std::string &output) const {
+		return inflate(input, length, output) == Z_OK;
 	}
 		
+	int ZlibCompressorBase::_window() const {
+		return raw ? -15 : 15;
+	}
+
 }
 
 #endif
