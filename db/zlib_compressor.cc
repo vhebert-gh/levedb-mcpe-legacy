@@ -13,7 +13,7 @@ namespace leveldb {
 		unsigned char temp_buffer[BUFSIZE];
 
 		//reserve enough memory to not reallocate on the fly
-		buffer.reserve(compressBound(length));
+		buffer.reserve(buffer.size() + compressBound(length));
 
 		z_stream strm;
 		strm.zalloc = 0;
