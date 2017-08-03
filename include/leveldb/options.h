@@ -19,6 +19,7 @@ class DLLX FilterPolicy;
 class DLLX Logger;
 class DLLX Snapshot;
 class DLLX Compressor;
+class DLLX DecompressAllocator;
 
 // Options to control the behavior of a database (passed to DB::Open)
 struct DLLX Options {
@@ -157,10 +158,15 @@ struct DLLX ReadOptions {
   // Default: NULL
   const Snapshot* snapshot;
 
+  // Allocator to grab the (possibly tens of mb big) blocks of memory 
+  // where to decompress
+  DecompressAllocator* decompressAllocator;
+
   ReadOptions()
       : verify_checksums(false),
         fill_cache(true),
-        snapshot(NULL) {
+        snapshot(NULL),
+		decompressAllocator(NULL) {
   }
 };
 
