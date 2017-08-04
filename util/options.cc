@@ -21,10 +21,10 @@ Options::Options()
       block_cache(NULL),
       block_size(4096),
       block_restart_interval(16),
+      max_file_size(2<<20),
       reuse_logs(false),
       filter_policy(NULL) {
 
 	memset(compressors, 0, sizeof(compressors));
 }
-
 }  // namespace leveldb
