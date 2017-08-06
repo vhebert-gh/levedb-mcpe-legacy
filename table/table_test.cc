@@ -13,6 +13,7 @@
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "leveldb/table_builder.h"
+#include "leveldb/snappy_compressor.h"
 #include "table/block.h"
 #include "table/block_builder.h"
 #include "table/format.h"
@@ -810,7 +811,6 @@ TEST(TableTest, ApproximateOffsetOfPlain) {
   KVMap kvmap;
   Options options;
   options.block_size = 1024;
-  options.compression = kNoCompression;
   c.Finish(options, &keys, &kvmap);
 
   ASSERT_TRUE(Between(c.ApproximateOffsetOf("abc"),       0,      0));
@@ -828,9 +828,13 @@ TEST(TableTest, ApproximateOffsetOfPlain) {
 }
 
 static bool SnappyCompressionSupported() {
+#ifdef SNAPPY
   std::string out;
   Slice in = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   return port::Snappy_Compress(in.data(), in.size(), &out);
+#else
+  return false;
+#endif
 }
 
 TEST(TableTest, ApproximateOffsetOfCompressed) {
@@ -850,7 +854,7 @@ TEST(TableTest, ApproximateOffsetOfCompressed) {
   KVMap kvmap;
   Options options;
   options.block_size = 1024;
-  options.compression = kSnappyCompression;
+  options.compressors[0] = new leveldb::SnappyCompressor();
   c.Finish(options, &keys, &kvmap);
 
   // Expected upper and lower bounds of space used by compressible strings.

@@ -35,21 +35,21 @@ namespace leveldb {
 
 	};
 
-	class ZlibCompressor : public ZlibCompressorBase {
+	class DLLX ZlibCompressor : public ZlibCompressorBase {
 	public:
 		static const int SERIALIZE_ID = 2;
 
-		ZlibCompressor(int compressionLevel) :
+		ZlibCompressor(int compressionLevel = -1) :
 			ZlibCompressorBase(SERIALIZE_ID, compressionLevel, false) {
 
 		}
 	};
 
-	class ZlibCompressorRaw : public ZlibCompressorBase {
+	class DLLX ZlibCompressorRaw : public ZlibCompressorBase {
 	public:
 		static const int SERIALIZE_ID = 4;
 
-		ZlibCompressorRaw(int compressionLevel) :
+		ZlibCompressorRaw(int compressionLevel = -1) :
 			ZlibCompressorBase(SERIALIZE_ID, compressionLevel, true) {
 
 		}
