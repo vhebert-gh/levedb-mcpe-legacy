@@ -172,13 +172,13 @@ struct DLLX ReadOptions {
 
   // Allocator to grab the (possibly tens of mb big) blocks of memory 
   // where to decompress
-  DecompressAllocator* decompressAllocator;
+  DecompressAllocator* decompress_allocator;
 
   ReadOptions()
       : verify_checksums(false),
         fill_cache(true),
         snapshot(NULL),
-		decompressAllocator(NULL) {
+		decompress_allocator(NULL) {
   }
 };
 

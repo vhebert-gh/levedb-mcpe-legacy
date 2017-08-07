@@ -30,7 +30,7 @@ int main() {
 	
 	//create a reusable memory space for decompression so it allocates less
 	leveldb::ReadOptions readOptions;
-	readOptions.decompressAllocator = new leveldb::DecompressAllocator();
+	readOptions.decompress_allocator = new leveldb::DecompressAllocator();
 
 
 	//... init leveldb with Options and read with ReadOptions
