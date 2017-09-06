@@ -252,9 +252,8 @@ namespace leveldb {
 			}
 
 			virtual Status Flush() {
-				//BOOL ret = ::FlushFileBuffers(_file);
-				//return (!ret ? GetLastWindowsError(_fname) : Status::OK());
-				return Status::OK();
+				BOOL ret = ::FlushFileBuffers(_file);
+				return (!ret ? GetLastWindowsError(_fname) : Status::OK());
 			}
 	
 			virtual Status Sync() {
