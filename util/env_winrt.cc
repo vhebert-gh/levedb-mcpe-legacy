@@ -86,20 +86,30 @@ namespace leveldb {
 			}
 		}
 
-		static Status OpenFile(const std::string& fname, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, HANDLE& file)
+		static Status OpenFile(const std::string& fname, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, HANDLE& file, DWORD dwFlags = 0)
 		{
 			EnsureDirectory(fname);
 			std::wstring path = GetFullPath(fname);
 #ifdef MCPE_PLATFORM_WINRT
+			CREATEFILE2_EXTENDED_PARAMETERS extraParams;
+			ZeroMemory(&extraParams, sizeof(extraParams));
+			extraParams.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+			extraParams.dwSize = sizeof(extraParams);
+			extraParams.dwFileFlags = dwFlags;
+
 			file = ::CreateFile2(path.c_str(),
 				dwDesiredAccess,
 				dwShareMode,
-				dwCreationDisposition, NULL);
+				dwCreationDisposition, 
+				&extraParams);
 #else
 			file = ::CreateFileW(path.c_str(),
 				dwDesiredAccess,
 				dwShareMode,
-				NULL, dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+				NULL, 
+				dwCreationDisposition,
+				dwFlags ? dwFlags : FILE_ATTRIBUTE_NORMAL, 
+				NULL);
 #endif
 			return (file == INVALID_HANDLE_VALUE ? GetLastWindowsError(fname) : Status::OK());
 		}
@@ -182,13 +192,11 @@ namespace leveldb {
 		private:
 			std::string _fname;
 			HANDLE _file;
-			mutable std::mutex _mutex;
-
 		public:
 			WinRandomAccessFile(const std::string& fname)
 				: _fname(fname)
 			{
-				Status s = OpenFile(fname, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, _file);
+				Status s = OpenFile(fname, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, _file, FILE_FLAG_OVERLAPPED | FILE_FLAG_RANDOM_ACCESS);
 				if (!s.ok())
 					throw IOException(s.ToString().c_str());
 			}
@@ -199,20 +207,35 @@ namespace leveldb {
 			}
 
 			virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
-				// no pread on Windows so we emulate it with a mutex
-				std::unique_lock<std::mutex> lock(_mutex);
-				LARGE_INTEGER cur;
-				cur.QuadPart = offset;
-				if (!::SetFilePointerEx(_file, cur, NULL, FILE_BEGIN))
-					return GetLastWindowsError(_fname);
+				OVERLAPPED readDesc;
+				ZeroMemory(&readDesc, sizeof(readDesc));
+				readDesc.Offset = offset;
+				readDesc.OffsetHigh = offset >> 32;
+				readDesc.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
 				DWORD dwRead = 0;
-				BOOL ret = ::ReadFile(_file, scratch, n, &dwRead, NULL);
-				*result = Slice(scratch, dwRead);
-				lock.unlock();
-				if(!ret) {
+				BOOL ret = ::ReadFile(_file, scratch, n, NULL, &readDesc);
+
+				// the function might be completing asynchronously
+				if (ret == 0 && GetLastError() != ERROR_IO_PENDING) {
 					return GetLastWindowsError(_fname);
 				}
+
+				// Wait until the read is completed
+				ret = WaitForSingleObject(readDesc.hEvent, INFINITE);
+				if (ret == WAIT_FAILED) {
+					return GetLastWindowsError(_fname);
+				}
+
+				// then read the result and the read bytes
+				ret = GetOverlappedResult(_file, &readDesc, &dwRead, FALSE);
+				
+				if(ret == 0) {
+					return GetLastWindowsError(_fname);
+				}
+
+				*result = Slice(scratch, dwRead);
+
 				return Status::OK();
 			}
 		};
