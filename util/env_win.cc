@@ -1,20 +1,12 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
-#ifdef WIN32
 
-#include <deque>
+#if defined(LEVELDB_PLATFORM_WINDOWS)
 
+#define VC_EXTRALEAN            // Exclude rarely-used stuff
+#define WIN32_LEAN_AND_MEAN     // Exclude rarely-used stuff from Windows headers
 #include <windows.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
-#include <io.h>
 #include "leveldb/env.h"
 #include "leveldb/slice.h"
 
@@ -23,92 +15,228 @@
 #include "util/logging.h"
 
 
+#include <deque>
 #include <fstream>
 #include <algorithm>
 #include <sstream>
 #include <chrono>
-#include <ctime>
 #include <memory>
 #include <condition_variable>
 #include <thread>
+#include "Filepath.h"
+
+#define MAX_FILENAME 512
 
 namespace leveldb {
 	namespace {
+
+		class NoOpLogger : public Logger {
+		public:
+			virtual void Logv(const char* format, va_list ap) { }
+		};
+
+		struct IOException : public std::exception
+		{
+			std::string s;
+			IOException(std::string ss) : s(ss) {}
+			~IOException() throw () {} // Updated
+			const char* what() const throw() { return s.c_str(); }
+		};
+
+		static std::string ws2s(const std::wstring& ws)
+		{
+			int len;
+			int wslength = (int)ws.length() + 1;
+			len = WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), wslength, 0, 0, NULL, NULL);
+			char* buf = new char[len];
+			WideCharToMultiByte(CP_UTF8, 0, ws.c_str(), wslength, buf, len, NULL, NULL);
+			std::string r(buf);
+			delete[] buf;
+			return r;
+		}
+
+		static Status GetLastWindowsError(const std::string& name) {
+			WCHAR lpBuffer[256] = L"?";
+			FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM,                 // It's a system error
+				NULL,                                      // No string to be formatted needed
+				GetLastError(),                               // Hey Windows: Please explain this error!
+				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),  // Do it in the standard language
+				lpBuffer,              // Put the message here
+				(sizeof(lpBuffer) / sizeof(WCHAR)),         // Number of characters to store the message
+				NULL);
+			return Status::IOError(name, ws2s(lpBuffer).c_str());
+		}
+
+		static std::wstring GetFullPath(const std::string& fname) {
+			return ::port::toFilePath(fname);
+		}
+
+		static void EnsureDirectory(const std::string& fname)
+		{
+			std::string dir = fname;
+			std::replace(dir.begin(), dir.end(), '/', '\\');
+			char tmpName[MAX_FILENAME];
+			strcpy_s(tmpName, dir.c_str());
+
+			// Create parent directories
+			for (char* p = strchr(tmpName, '\\'); p; p = strchr(p + 1, '\\')) {
+				*p = 0;
+				::CreateDirectoryW(GetFullPath(tmpName).c_str(), NULL);  // may or may not already exist
+				*p = '\\';
+			}
+		}
+
+		static Status OpenFile(const std::string& fname, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, HANDLE& file, DWORD dwFlags = 0)
+		{
+			EnsureDirectory(fname);
+			std::wstring path = GetFullPath(fname);
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM) && (_WIN32_WINNT >= 0x0602)
+			CREATEFILE2_EXTENDED_PARAMETERS extraParams;
+			ZeroMemory(&extraParams, sizeof(extraParams));
+			extraParams.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
+			extraParams.dwSize = sizeof(extraParams);
+			extraParams.dwFileFlags = dwFlags;
+
+			file = ::CreateFile2(path.c_str(),
+				dwDesiredAccess,
+				dwShareMode,
+				dwCreationDisposition, 
+				&extraParams);
+#else
+			file = ::CreateFileW(path.c_str(),
+				dwDesiredAccess,
+				dwShareMode,
+				NULL, 
+				dwCreationDisposition,
+				dwFlags ? dwFlags : FILE_ATTRIBUTE_NORMAL, 
+				NULL);
+#endif
+			return (file == INVALID_HANDLE_VALUE ? GetLastWindowsError(fname) : Status::OK());
+		}
+
+		static Status CloseFile(const std::string& fname, HANDLE& file)
+		{
+			if (file != INVALID_HANDLE_VALUE)
+			{
+				BOOL ret = ::CloseHandle(file);
+				file = INVALID_HANDLE_VALUE;
+				return (!ret ? GetLastWindowsError(fname) : Status::OK());
+			}
+			else
+				return Status::OK();
+		}
 
 		// returns the ID of the current process
 		static uint32_t current_process_id(void) {
 			return static_cast<uint32_t>(::GetCurrentProcessId());
 		}
 
-		// returns the ID of the current thread
-		static uint32_t current_thread_id(void) {
-			return static_cast<uint32_t>(::GetCurrentThreadId());
-		}
-
-		static char global_read_only_buf[0x8000];
-
 		class WinSequentialFile : public SequentialFile {
 		private:
-			std::string filename_;
-			FILE* file_;
+			std::string _fname;
+			HANDLE _file;
 
 		public:
-			WinSequentialFile(const std::string& fname, FILE* f)
-				: filename_(fname), file_(f) {}
-			virtual ~WinSequentialFile() { fclose(file_); }
 
-			virtual Status Read(size_t n, Slice* result, char* scratch) {
-				Status s;
-				size_t r = fread_unlocked(scratch, 1, n, file_);
-				*result = Slice(scratch, r);
-				if(r < n) {
-					if(feof(file_)) {
-						// We leave status as ok if we hit the end of the file
-					} else {
-						// A partial read with an error: return a non-ok status
-						s = Status::IOError(filename_, strerror(errno));
-					}
+			WinSequentialFile(const std::string& fname)
+				: _fname(fname) 
+			{
+				Status s = OpenFile(fname, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, _file);
+				if (!s.ok())
+					throw IOException(s.ToString().c_str());
 			}
-				return s;
-		}
+
+			virtual ~WinSequentialFile() 
+			{ 
+				CloseFile(_fname, _file);
+			}
+
+			virtual Status Read(size_t n, Slice* result, char* scratch)
+			{
+				DWORD dwRead;
+				BOOL ret = ::ReadFile(_file, scratch, n, &dwRead, NULL);
+				if (!ret)
+					return GetLastWindowsError(_fname);
+				*result = Slice(scratch, dwRead);
+				if (dwRead < n)
+				{
+					LARGE_INTEGER cur, end;
+					ret = ::SetFilePointerEx(_file, LARGE_INTEGER(), &cur, FILE_CURRENT);
+					if (!ret)
+						return GetLastWindowsError(_fname);
+					ret = ::SetFilePointerEx(_file, LARGE_INTEGER(), &end, FILE_END);
+					if (!ret)
+						return GetLastWindowsError(_fname);
+					if (end.QuadPart > cur.QuadPart)
+					{
+						// couldn't read enough bytes
+						::SetFilePointerEx(_file, cur, NULL, FILE_CURRENT);
+						return Status::IOError(_fname, "Couldn't read all data");
+					}
+					else
+						return Status::OK();
+				}
+				else
+					return Status::OK();
+
+			}
 
 			virtual Status Skip(uint64_t n) {
-				if(fseek(file_, n, SEEK_CUR)) {
-					return Status::IOError(filename_, strerror(errno));
-				}
-				return Status::OK();
+				LARGE_INTEGER cur;
+				cur.QuadPart = n;
+				return (!::SetFilePointerEx(_file, cur, NULL, FILE_CURRENT) ? GetLastWindowsError(_fname) : Status::OK());
 			}
 		};
 
 		class WinRandomAccessFile : public RandomAccessFile {
 		private:
-			std::string filename_;
-			int fd_;
-			mutable std::mutex mu_;
-
+			std::string _fname;
+			HANDLE _file;
 		public:
-			WinRandomAccessFile(const std::string& fname, int fd)
-				: filename_(fname), fd_(fd) {}
-			virtual ~WinRandomAccessFile() { close(fd_); }
+			WinRandomAccessFile(const std::string& fname)
+				: _fname(fname)
+			{
+				Status s = OpenFile(fname, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, _file, FILE_FLAG_OVERLAPPED | FILE_FLAG_RANDOM_ACCESS);
+				if (!s.ok())
+					throw IOException(s.ToString().c_str());
+			}
 
-			virtual Status Read(uint64_t offset, size_t n, Slice* result,
-				char* scratch) const {
-				Status s;
-				// no pread on Windows so we emulate it with a mutex
-				std::unique_lock<std::mutex> lock(mu_);
+			virtual ~WinRandomAccessFile() 
+			{ 
+				CloseFile(_fname, _file);
+			}
 
-				if(::_lseeki64(fd_, offset, SEEK_SET) == -1L) {
-					return Status::IOError(filename_, strerror(errno));
+			virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const {
+				OVERLAPPED readDesc;
+				ZeroMemory(&readDesc, sizeof(readDesc));
+				readDesc.Offset = offset;
+				readDesc.OffsetHigh = offset >> 32;
+				readDesc.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+				DWORD dwRead = 0;
+				BOOL ret = ::ReadFile(_file, scratch, n, NULL, &readDesc);
+
+				// the function might be completing asynchronously
+				if (ret == 0 && GetLastError() != ERROR_IO_PENDING) {
+					return GetLastWindowsError(_fname);
 				}
 
-				int r = ::_read(fd_, scratch, n);
-				*result = Slice(scratch, (r < 0) ? 0 : r);
-				lock.unlock();
-				if(r < 0) {
-					// An error: return a non-ok status
-					s = Status::IOError(filename_, strerror(errno));
+				// Wait until the read is completed
+				ret = WaitForSingleObject(readDesc.hEvent, INFINITE);
+				if (ret == WAIT_FAILED) {
+					return GetLastWindowsError(_fname);
 				}
-				return s;
+
+				// then read the result and the read bytes
+				ret = GetOverlappedResult(_file, &readDesc, &dwRead, FALSE);
+				
+				if(ret == 0) {
+					return GetLastWindowsError(_fname);
+				}
+
+				*result = Slice(scratch, dwRead);
+
+				return Status::OK();
 			}
 		};
 
@@ -119,9 +247,15 @@ namespace leveldb {
 
 		class WinFile : public WritableFile {
 
+		private:
+			std::string _fname;
+			HANDLE _file;
+
 		public:
-			explicit WinFile(std::string path) : path_(path), written_(0) {
-				Open();
+			explicit WinFile(std::string fname) : _fname(fname) {
+				Status s = OpenFile(fname, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, CREATE_ALWAYS, _file);
+				if (!s.ok())
+					throw IOException(s.ToString().c_str());
 			}
 
 			virtual ~WinFile() {
@@ -129,250 +263,184 @@ namespace leveldb {
 			}
 
 		private:
-			void Open() {
-				// we truncate the file as implemented in env_posix
-				file_.open(path_.c_str(),
-					std::ios_base::trunc | std::ios_base::out | std::ios_base::binary);
-				written_ = 0;
-			}
-
 		public:
 			virtual Status Append(const Slice& data) {
-				Status result;
-				file_.write(data.data(), data.size());
-				if(!file_.good()) {
-					result = Status::IOError(
-						path_ + " Append", "cannot write");
-				}
-				return result;
+				DWORD dwWritten;
+				BOOL ret = ::WriteFile(_file, data.data(), data.size(), &dwWritten, NULL);
+				return ((!ret || dwWritten < data.size()) ? GetLastWindowsError(_fname) : Status::OK());
 			}
 
 			virtual Status Close() {
-				Status result;
-
-				try {
-					if(file_.is_open()) {
-						Sync();
-						file_.close();
-					}
-				} catch(const std::exception & e) {
-					result = Status::IOError(path_ + " close", e.what());
-				}
-
-				return result;
+				return CloseFile(_fname, _file);
 			}
 
 			virtual Status Flush() {
+				//BOOL ret = ::FlushFileBuffers(_file);
+				//return (!ret ? GetLastWindowsError(_fname) : Status::OK());
 				return Status::OK();
 			}
-
+	
 			virtual Status Sync() {
-				Status result;
-				try {
-					file_.flush();
-				} catch(const std::exception & e) {
-					result = Status::IOError(path_ + " sync", e.what());
-				}
-
-				return result;
+				BOOL ret = ::FlushFileBuffers(_file);
+				return (!ret ? GetLastWindowsError(_fname) : Status::OK());
+				//return Flush();
 			}
-
-		private:
-			std::string path_;
-			uint64_t written_;
-			std::ofstream file_;
 		};
-
-
 
 		class WinFileLock : public FileLock {
+		private:
+			std::string _fname;
+			HANDLE _file;
+			DWORD _fileSizeHigh;
+			DWORD _fileSizeLow;
 		public:
-			WinFileLock(const std::string& path) {
-				fileHandle = CreateFileA(path.c_str(),
-					GENERIC_READ | GENERIC_WRITE,
-					FILE_SHARE_DELETE | FILE_SHARE_READ,
-					NULL,
-					OPEN_ALWAYS,
-					FILE_ATTRIBUTE_NORMAL,
-					NULL);
-				fileSizeLow = GetFileSize(fileHandle, &fileSizeHigh);
-				LockFile(fileHandle, 0, 0, fileSizeLow, fileSizeHigh);
-			}
-			~WinFileLock() {
-				UnlockFile(fileHandle, 0, 0, fileSizeLow, fileSizeHigh);
-				CloseHandle(fileHandle);
+			WinFileLock(const std::string& fname) 
+				: _fname(fname) 
+			{
+				FILE_STANDARD_INFO fi;
+				Status s = OpenFile(fname, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_ALWAYS, _file);
+				if (!s.ok())
+					throw IOException(s.ToString().c_str());
+				if (_file != INVALID_HANDLE_VALUE && GetFileInformationByHandleEx(_file, FILE_INFO_BY_HANDLE_CLASS::FileStandardInfo, &fi, sizeof(fi)))
+				{
+					_fileSizeLow = fi.EndOfFile.LowPart;
+					_fileSizeHigh = fi.EndOfFile.HighPart;
+					if (_fileSizeLow > 0 || _fileSizeHigh > 0)
+					{
+                        OVERLAPPED overlapped = { };
+						if (!::LockFileEx(_file, 0, 0, _fileSizeLow, _fileSizeHigh, &overlapped))
+						{
+							Status s = GetLastWindowsError(fname);
+							throw IOException(s.ToString().c_str());
+						}
+					}
+				}
+				else
+				{
+					_fileSizeLow = _fileSizeHigh = 0;
+				}
 			}
 
-		private:
-			HANDLE fileHandle = 0;
-			DWORD fileSizeHigh = 0;
-			DWORD fileSizeLow = 0;
+			~WinFileLock() 
+			{
+				if (_file != INVALID_HANDLE_VALUE)
+				{
+					if (_fileSizeLow > 0 || _fileSizeHigh > 0)
+						if (!::UnlockFileEx(_file, 0, _fileSizeLow, _fileSizeHigh, NULL))
+						{
+							Status s = GetLastWindowsError(_fname);
+						}
+					CloseFile(_fname, _file);
+				}
+			}
+
 		};
 
-		class WinEnv : public Env {
+		class WinRTEnv : public Env {
 		public:
-			WinEnv();
-			virtual ~WinEnv() {
+			WinRTEnv();
+			virtual ~WinRTEnv() {
 				fprintf(stderr, "Destroying Env::Default()\n");
 			}
 
-			virtual Status NewSequentialFile(const std::string& fname,
-				SequentialFile** result) {
-				FILE* f = fopen(fname.c_str(), "rb");
-				if(f == NULL) {
-					*result = NULL;
-					return Status::IOError(fname, strerror(errno));
-				} else {
-					*result = new WinSequentialFile(fname, f);
-					return Status::OK();
+			virtual Status NewSequentialFile(const std::string& fname, SequentialFile** result)
+			{
+				Status s;
+				try {
+					*result = new WinSequentialFile(fname);
 				}
+				catch (const IOException & e) {
+					s = Status::IOError(fname, e.what());
+				}
+				return s;
 			}
 
-			virtual Status NewRandomAccessFile(const std::string& fname,
-				RandomAccessFile** result) {
-#ifdef WIN32
-				int fd = _open(fname.c_str(), _O_RDONLY | _O_RANDOM | _O_BINARY);
-#else
-				int fd = open(fname.c_str(), O_RDONLY);
-#endif
-				if(fd < 0) {
-					*result = NULL;
-					return Status::IOError(fname, strerror(errno));
+			virtual Status NewRandomAccessFile(const std::string& fname, RandomAccessFile** result)
+			{
+				Status s;
+				try {
+					*result = new WinRandomAccessFile(fname);
 				}
-				*result = new WinRandomAccessFile(fname, fd);
-				return Status::OK();
+				catch (const IOException & e) {
+					s = Status::IOError(fname, e.what());
+				}
+				return s;
 			}
 
-			virtual Status NewWritableFile(const std::string& fname,
-				WritableFile** result) {
+			virtual Status NewWritableFile(const std::string& fname, WritableFile** result) {
 				Status s;
 				try {
 					// will create a new empty file to write to
 					*result = new WinFile(fname);
-				} catch(const std::exception & e) {
+				} catch(const IOException & e) {
 					s = Status::IOError(fname, e.what());
 				}
-
 				return s;
 			}
 
 			virtual bool FileExists(const std::string& fname) {
-				DWORD attribs = GetFileAttributesA(fname.c_str());
-				return attribs != INVALID_FILE_ATTRIBUTES;
+				WIN32_FILE_ATTRIBUTE_DATA fi;
+				return (GetFileAttributesExW(GetFullPath(fname).c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fi) ? true : false);
 			}
-			Status getLastWindowsError(const std::string& name) {
-				char lpBuffer[256] = "?";
-				FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM,                 // It´s a system error
-					NULL,                                      // No string to be formatted needed
-					GetLastError(),                               // Hey Windows: Please explain this error!
-					MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),  // Do it in the standard language
-					lpBuffer,              // Put the message here
-					sizeof(lpBuffer) - 1,                     // Number of bytes to store the message
-					NULL);
-				return Status::IOError(name, lpBuffer);
-			}
-			virtual Status GetChildren(const std::string& dir,
-				std::vector<std::string>* result) {
+
+			virtual Status GetChildren(const std::string& dir, std::vector<std::string>* result) {
 				std::string path = dir;
 				result->clear();
 
-				WIN32_FIND_DATA ffd;
+				WIN32_FIND_DATAW ffd;
 				HANDLE hFind;
 				path = dir + "/*";
-				hFind = FindFirstFileA(path.c_str(), &ffd);
+				hFind = FindFirstFileExW(GetFullPath(path).c_str(), FINDEX_INFO_LEVELS::FindExInfoStandard, &ffd, FINDEX_SEARCH_OPS::FindExSearchNameMatch, NULL, 0);
 
 				if(INVALID_HANDLE_VALUE == hFind) {
-					return getLastWindowsError(path);
+					return GetLastWindowsError(path);
 				}
 
 				do {
-					result->push_back(ffd.cFileName);
-				} while(FindNextFile(hFind, &ffd) != 0);
+					result->push_back(ws2s(ffd.cFileName));
+				} while(FindNextFileW(hFind, &ffd) != 0);
+
+				FindClose(hFind);
 
 				return Status::OK();
 			}
 
 			virtual Status DeleteFile(const std::string& fname) {
-				if(::DeleteFileA(fname.c_str()) != 0) {
+				if (::DeleteFileW(GetFullPath(fname).c_str()) != 0) {
 					return Status::OK();
 				} else {
-					return getLastWindowsError(fname);
+					return GetLastWindowsError(fname);
 				}
 			}
 
-#define MAX_FILENAME 512
 			virtual Status CreateDir(const std::string& name) {
-				std::string path = name;
-				std::replace(path.begin(), path.end(), '/', '\\');
-				char tmpName[MAX_FILENAME];
-				strcpy(tmpName, path.c_str());
-
-				// Create parent directories
-				for(LPTSTR p = strchr(tmpName, '\\'); p; p = strchr(p + 1, '\\')) {
-					*p = 0;
-					::CreateDirectoryA(tmpName, NULL);  // may or may not already exist
-					*p = '\\';
-				}
-
-				::CreateDirectoryA(path.c_str(), NULL);
+				EnsureDirectory(name);
+				::CreateDirectoryW(GetFullPath(name).c_str(), NULL);
 				return Status::OK();
 			};
 
 			virtual Status DeleteDir(const std::string& name) {
-				int len = strlen(name.c_str());
-				//TCHAR *pszFrom = new TCHAR[len+2];
-				char* pszFrom = new char[len + 2];
-				strcpy(pszFrom, name.c_str());
-				pszFrom[len] = 0;
-				pszFrom[len + 1] = 0;
-
-				SHFILEOPSTRUCTA fileop;
-				fileop.hwnd = NULL;    // no status display
-				fileop.wFunc = FO_DELETE;  // delete operation
-				fileop.pFrom = pszFrom;  // source file name as double null terminated string
-				fileop.pTo = NULL;    // no destination needed
-				fileop.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;  // do not prompt the user
-
-				fileop.fAnyOperationsAborted = FALSE;
-				fileop.lpszProgressTitle = NULL;
-				fileop.hNameMappings = NULL;
-
-				int ret = SHFileOperationA(&fileop);
-				delete[] pszFrom;
-				if(ret != 0) {
-					std::stringstream ss;
-					ss << "Problem deleting directory: " << ret;
-					Status::IOError(name, ss.str());
-				}
+				BOOL ret = ::RemoveDirectoryW(GetFullPath(name).c_str());
+				if (!ret)
+					Status s = GetLastWindowsError(name);
 				return Status::OK();
 			};
 
 			virtual Status GetFileSize(const std::string& fname, uint64_t* size) {
-				HANDLE fileHandle = CreateFileA(fname.c_str(),
-					GENERIC_READ | GENERIC_WRITE,
-					FILE_SHARE_DELETE | FILE_SHARE_READ,
-					NULL,
-					OPEN_ALWAYS,
-					FILE_ATTRIBUTE_NORMAL,
-					NULL);
-				if(fileHandle == 0) {
-					return getLastWindowsError(fname);
-				}
-				DWORD fileSizeHigh = 0;
-				DWORD fileSizeLow = ::GetFileSize(fileHandle, &fileSizeHigh);
-
-				CloseHandle(fileHandle);
-				if(fileSizeLow == 0) {
-					return getLastWindowsError(fname);
-				}
-
+				WIN32_FILE_ATTRIBUTE_DATA fi;
+				BOOL ret = GetFileAttributesExW(GetFullPath(fname).c_str(), GET_FILEEX_INFO_LEVELS::GetFileExInfoStandard, &fi);
+				if (!ret)
+					return GetLastWindowsError(fname);
+				*size = ((uint64_t)fi.nFileSizeLow + ((uint64_t)fi.nFileSizeHigh << 32));
 				return Status::OK();
 			}
 
 			virtual Status RenameFile(const std::string& src, const std::string& target) {
-				DeleteFile(target);
-				if(MoveFileA(src.c_str(), target.c_str()) != TRUE) {
-					return getLastWindowsError(src);
+				std::wstring fullsrc = GetFullPath(src);
+				std::wstring fulltarget = GetFullPath(target);
+				::DeleteFileW(fulltarget.c_str());
+				if (::MoveFileExW(fullsrc.c_str(), fulltarget.c_str(), 0) != TRUE) {
+					return GetLastWindowsError(src);
 				} else {
 					return Status::OK();
 				}
@@ -380,12 +448,19 @@ namespace leveldb {
 
 			virtual Status LockFile(const std::string& fname, FileLock** lock) {
 				*lock = NULL;
-
-				Status status;
-				if(!FileExists(fname)) {
-					std::ofstream of(fname, std::ios_base::trunc | std::ios_base::out);
+				if (!FileExists(fname)) {
+					HANDLE file;
+					Status s = OpenFile(fname, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, CREATE_ALWAYS, file);
+					if (s.ok())
+						CloseFile(fname, file);
 				}
-				*lock = new WinFileLock(fname);
+				try
+				{
+					*lock = new WinFileLock(fname);
+				}
+				catch (const IOException & e) {
+					return Status::IOError(fname, e.what());
+				}
 
 				return Status::OK();
 			}
@@ -421,63 +496,14 @@ namespace leveldb {
 #endif
 
 			virtual Status NewLogger(const std::string& fname, Logger** result) {
-				FILE* f = fopen(fname.c_str(), "wt");
-				if(f == NULL) {
-					*result = NULL;
-					return Status::IOError(fname, strerror(errno));
-				} else {
-#ifdef WIN32
-					*result = new WinLogger(f);
-#else
-					*result = new PosixLogger(f, &WinEnv::gettid);
-#endif
-					return Status::OK();
-				}
-			}
-
-			struct timezone {
-				int  tz_minuteswest; /* minutes W of Greenwich */
-				int  tz_dsttime;     /* type of dst correction */
-			};
-#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
-#define DELTA_EPOCH_IN_MICROSECS  116444736000000000Ui64 // CORRECT
-#else
-#define DELTA_EPOCH_IN_MICROSECS  116444736000000000ULL // CORRECT
-#endif
-			int gettimeofday(struct timeval *tv, struct timezone *tz) {
-				FILETIME ft;
-				uint64_t tmpres = 0;
-				static int tzflag = 0;
-
-				if(tv) {
-					GetSystemTimeAsFileTime(&ft);
-					tmpres |= ft.dwHighDateTime;
-					tmpres <<= 32;
-					tmpres |= ft.dwLowDateTime;
-
-					/*converting file time to unix epoch*/
-					tmpres /= 10;  /*convert into microseconds*/
-					tmpres -= DELTA_EPOCH_IN_MICROSECS;
-					tv->tv_sec = (long)(tmpres / 1000000UL);
-					tv->tv_usec = (long)(tmpres % 1000000UL);
-				}
-
-				if(tz) {
-					if(!tzflag) {
-						_tzset();
-						tzflag++;
-					}
-					tz->tz_minuteswest = _timezone / 60;
-					tz->tz_dsttime = _daylight;
-				}
-
-				return 0;
+				*result = new NoOpLogger();
+				return Status::OK();
 			}
 
 			virtual uint64_t NowMicros() {
-				struct timeval tv;
-				gettimeofday(&tv, 0);
-				return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+				const auto now = std::chrono::high_resolution_clock::now().time_since_epoch();
+
+				return std::chrono::duration_cast<std::chrono::microseconds>(now).count();
 			}
 
 			virtual void SleepForMicroseconds(int micros) {
@@ -486,19 +512,12 @@ namespace leveldb {
 
 
 		private:
-			void PthreadCall(const char* label, int result) {
-				if(result != 0) {
-					fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
-					exit(1);
-				}
-			}
 
 			// BGThread() is the body of the background thread
 			void BGThread();
 
-			static void* BGThreadWrapper(void* arg) {
-				reinterpret_cast<WinEnv*>(arg)->BGThread();
-				return NULL;
+			static void BGThreadWrapper(void* arg) {
+				reinterpret_cast<WinRTEnv*>(arg)->BGThread();
 			}
 
 			std::mutex mu_;
@@ -511,15 +530,15 @@ namespace leveldb {
 			BGQueue queue_;
 		};
 
-		WinEnv::WinEnv() {}
+		WinRTEnv::WinRTEnv() {}
 
-		void WinEnv::Schedule(void(*function)(void*), void* arg) {
+		void WinRTEnv::Schedule(void(*function)(void*), void* arg) {
 			std::unique_lock<std::mutex> lock(mu_);
 
 			// Start background thread if necessary
 			if(!bgthread_) {
 				bgthread_.reset(
-					new std::thread(&WinEnv::BGThreadWrapper, this));
+					new std::thread(&BGThreadWrapper, this));
 			}
 
 			// Add to priority queue
@@ -533,7 +552,7 @@ namespace leveldb {
 
 		}
 
-		void WinEnv::BGThread() {
+		void WinRTEnv::BGThread() {
 			while(true) {
 				// Wait until there is an item that is ready to run
 				std::unique_lock<std::mutex> lock(mu_);
@@ -558,34 +577,20 @@ namespace leveldb {
 			};
 		}
 
-		DWORD WINAPI StartThreadWrapper(LPVOID lpParam) {
+		int StartThreadWrapper(LPVOID lpParam) {
  			StartThreadState* state = reinterpret_cast<StartThreadState*>(lpParam);
  			state->user_function(state->arg);
  			delete state;
  			return 0;
  		}
  
-		void WinEnv::StartThread(void(*function)(void* arg), void* arg) {
+		void WinRTEnv::StartThread(void(*function)(void* arg), void* arg) {
  			StartThreadState* state = new StartThreadState;
  			state->user_function = function;
  			state->arg = arg;
-			DWORD     thread_id;
- 			CreateThread(
- 				NULL,                   // default security attributes
- 				0,                      // use default stack size  
-				StartThreadWrapper,       // thread function name
- 				state,          // argument to thread function 
- 				0,                      // use default creation flags 
-				&thread_id);   // returns the thread identifier 
+			_Thrd_t thrd;
+			_Thrd_create(&thrd, StartThreadWrapper, state);
  		}
-
-		//void WinEnv::StartThread(void(*function)(void* arg), void* arg) {
-		//	StartThreadState* state = new StartThreadState;
-		//	state->user_function = function;
-		//	state->arg = arg;
-
-		//	boost::thread t(boost::bind(&StartThreadWrapper, state));
-		//}
 	}
 
 	static INIT_ONCE g_InitOnce = INIT_ONCE_STATIC_INIT;
@@ -593,21 +598,26 @@ namespace leveldb {
 	static BOOL CALLBACK InitDefaultEnv(PINIT_ONCE InitOnce,
 		PVOID Parameter,
 		PVOID *lpContext) {
-		::memset(global_read_only_buf, 0, sizeof(global_read_only_buf));
-		default_env = new WinEnv;
+		default_env = new WinRTEnv;
 		return TRUE;
 	}
 
+	// Xbox uses the LevelDB Environment Plugin that goes through Core::FileSystem
+#ifndef LEVELDB_ENVIRONMENT_PLUGIN
 	Env* Env::Default() {
+#if 0
 		PVOID lpContext;
 		InitOnceExecuteOnce(&g_InitOnce,          // One-time initialization structure
 			InitDefaultEnv,   // Pointer to initialization callback function
-			NULL,                 // Optional parameter to callback function (not used)
+			"",                 // Optional parameter to callback function (not used)
 			&lpContext);          // Receives pointer to event object stored in g_InitOnce
+#else
+		if (default_env == NULL)
+			InitDefaultEnv(NULL, NULL, NULL);
+#endif
 
 		return default_env;
 	}
-
+#endif
 }
-
 #endif
