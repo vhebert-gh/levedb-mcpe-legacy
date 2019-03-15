@@ -213,17 +213,22 @@ namespace leveldb {
 				readDesc.OffsetHigh = offset >> 32;
 				readDesc.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
+				if (readDesc.hEvent == NULL) {
+					return GetLastWindowsError(_fname);
+				}
 				DWORD dwRead = 0;
 				BOOL ret = ::ReadFile(_file, scratch, n, NULL, &readDesc);
 
 				// the function might be completing asynchronously
 				if (ret == 0 && GetLastError() != ERROR_IO_PENDING) {
+					::CloseHandle(readDesc.hEvent);
 					return GetLastWindowsError(_fname);
 				}
 
 				// Wait until the read is completed
 				ret = WaitForSingleObject(readDesc.hEvent, INFINITE);
 				if (ret == WAIT_FAILED) {
+					::CloseHandle(readDesc.hEvent);
 					return GetLastWindowsError(_fname);
 				}
 
@@ -231,11 +236,13 @@ namespace leveldb {
 				ret = GetOverlappedResult(_file, &readDesc, &dwRead, FALSE);
 				
 				if(ret == 0) {
+					::CloseHandle(readDesc.hEvent);
 					return GetLastWindowsError(_fname);
 				}
 
 				*result = Slice(scratch, dwRead);
 
+				::CloseHandle(readDesc.hEvent);
 				return Status::OK();
 			}
 		};
