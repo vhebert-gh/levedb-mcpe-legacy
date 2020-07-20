@@ -584,19 +584,9 @@ namespace leveldb {
 			};
 		}
 
-		int StartThreadWrapper(LPVOID lpParam) {
- 			StartThreadState* state = reinterpret_cast<StartThreadState*>(lpParam);
- 			state->user_function(state->arg);
- 			delete state;
- 			return 0;
- 		}
- 
 		void WinRTEnv::StartThread(void(*function)(void* arg), void* arg) {
- 			StartThreadState* state = new StartThreadState;
- 			state->user_function = function;
- 			state->arg = arg;
-			_Thrd_t thrd;
-			_Thrd_create(&thrd, StartThreadWrapper, state);
+			std::thread new_thread(function, arg);
+			new_thread.detach();
  		}
 	}
 
