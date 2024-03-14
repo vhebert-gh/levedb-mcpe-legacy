@@ -1,3 +1,11 @@
+# What is this?
+leveldb-mcpe was a fork of an older version of [leveldb](https://github.com/google/leveldb) with added support for [zlib](https://www.zlib.net/). 
+This fork was the publicly available implementation of the world storage format for [minecraft bedrock edition](https://minecraft.wiki/w/Bedrock_Edition) up until March of 2024. This repo only exists strictly for preservation purposes as the original version of this repo no longer exists.
+
+Third party tools interested in interacting with world storage data in bedrock edition should use the more up to date fork that simply goes by [leveldb](https://github.com/mojang/leveldb).
+
+The following is the original contents of the README.md file.
+
 **LevelDB is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.**
 
 [![Build Status](https://travis-ci.org/google/leveldb.svg?branch=master)](https://travis-ci.org/google/leveldb)
